@@ -1,0 +1,19 @@
+{
+    "name": "techdivision/cleaner",
+    "type": "typo3-flow-package",
+    "description": "This package provides a command controller which remove all orphan resources from database and file system",
+    "require": {
+        "typo3/flow": "*",
+        "typo3/neos": "*"
+    },
+    "authors" : [{
+        "name" : "Marcus Biesel",
+        "email" : "m.biesel@techdivision.com",
+        "homepage" : "https://www.techdivision.com"
+    }],
+    "autoload": {
+        "psr-0": {
+            "TechDivision\\Cleaner": "Classes"
+        }
+    }
+}
