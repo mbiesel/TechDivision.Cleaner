@@ -22,7 +22,7 @@ class CleanCommandController extends \TYPO3\Flow\Cli\CommandController {
 
 	/**
 	* Clean service
-	
+	*
 	* @var \TechDivision\Cleaner\Service\CleanService
 	* @Flow\Inject
 	*/
