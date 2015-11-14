@@ -14,11 +14,11 @@ namespace TechDivision\Cleaner\Service;
  */
 
 use TYPO3\Flow\Annotations as Flow;
-use TYPO3\Flow\Resource\Resource;
 use TYPO3\Flow\Utility\TypeHandling;
 use TYPO3\Media\Domain\Model\Asset;
 use \TYPO3\Media\Domain\Model\Image;
 use TYPO3\Flow\Persistence\QueryResultInterface;
+use \TYPO3\Flow\Resource\Resource;
 
 class CleanService {
 
@@ -85,6 +85,20 @@ class CleanService {
     protected $orphanResources = array();
 
     /**
+     * All orphan assets
+     *
+     * @var Array<Asset>
+     */
+    protected $orphanAssets = array();
+
+	/**
+     * All orphan assets
+     *
+     * @var Array<Resource>
+     */
+    protected $orphanResourceEntries = array();
+
+    /**
      * File storage
      *
      * @var \TYPO3\Flow\Resource\Storage\StorageInterface
@@ -106,59 +120,125 @@ class CleanService {
      * Fetch all resources and initialize the file storage
      */
     public function initializeObject() {
-        $this->resources = $this->resourceRepository->findAll();
         $this->storage = $this->resourceManager->getStorage("defaultPersistentResourcesStorage");
     }
 
     /**
      * Remove all orphan resource files and database entries
      *
-     * @return int
+     * @return void
      */
     public function removeOrphanResources() {
-        $this->findOrphanResources();
+	    $groupedResources = $this->groupAllResourcesBySha1();
 
-        foreach($this->orphanResources as $resource) {
-            // delete from database
-            $this->deleteThumbnailsByResource($resource);
-            $this->resourceRepository->remove($resource);
+        $this->findOrphanResources($groupedResources);
 
-            // delete from file system
-            $this->storage->deleteResource($resource);
-        }
+		$this->deleteOrphanResources();
 
-        return count($this->orphanResources);
     }
+
+	protected function deleteOrphanResources() {
+
+		/** @var Resource $resource */
+		foreach($this->orphanResources as $resource) {
+
+			// delete from file system
+			$this->storage->deleteResource($resource);
+
+			$this->consoleOutput->outputLine('The resource with the sha1 key "%s" and the name "%s" was deleted from filesystem', array($resource->getSha1(), $resource->getFilename()));
+		}
+
+		$this->consoleOutput->outputLine('----------------------------------');
+
+		$orphanResources = array_merge($this->orphanResources, $this->orphanResourceEntries);
+
+		/** @var Resource $orphanResource */
+		foreach ($orphanResources as $orphanResource) {
+			$this->removeResourceAndThumbnailsByResource($orphanResource);
+			$this->consoleOutput->outputLine('The resource with the sha1 key "%s" and the name "%s" was deleted from database', array($orphanResource->getSha1(), $orphanResource->getFilename()));
+		}
+
+		$this->consoleOutput->outputLine('----------------------------------');
+
+		/** @var Asset $asset */
+		foreach ($this->orphanAssets as $asset) {
+			$this->assetRepository->remove($asset);
+			$this->consoleOutput->outputLine('The asset with the identifier "%s" and the label "%s" was deleted from database', array($asset->getIdentifier(), $asset->getLabel()));
+		}
+
+		$this->consoleOutput->outputLine('----------------------------------');
+
+		$this->consoleOutput->outputLine('%s resources were deleted from filesystem, %s resource and %s asset entries has been removed from database.', array(count($this->orphanResources), count($orphanResources), count($this->orphanAssets)));
+	}
+
+	protected function removeResourceAndThumbnailsByResource($resource) {
+		// delete from database
+		$this->deleteThumbnailsByResource($resource);
+
+		$resource->disableLifecycleEvents();
+		$this->persistenceManager->remove($resource);
+	}
+
+	protected function groupAllResourcesBySha1() {
+		$groupedResources = array();
+	    $resources = $this->resourceRepository->findAll();
+
+		/** @var Resource $resource */
+		foreach($resources as $resource) {
+			$groupedResources[$resource->getSha1()][] = $resource;
+		}
+
+		return $groupedResources;
+	}
 
     /**
      * Find orphan resources
      *
-     * @return array
+     * @param
+     * @return void
      */
-    public function findOrphanResources() {
-        $orphanResources = array();
-
-        /** @var \TYPO3\Flow\Resource\Resource $resource */
-        foreach($this->resources as $resource) {
-            /** @var QueryResultInterface<Asset> $assets */
-            $assets = $this->assetRepository->findByResource($resource);
-
-            if(count($assets) === 1) {
-                $this->checkForOrphanAsset($resource, $assets->getFirst());
-            } elseif (count($assets) === 0) {
-                $this->checkResourcesWithSameSah1($resource);
-            } else {
-                $this->consoleOutput->outputLine('ATTENTION we have found %s assets for the same resource "%s" with the sha1 key %s',
-                    array(count($assets), $resource->getFilename(), $resource->getSha1()));
-            }
-        }
-
-        return $orphanResources;
+    protected function findOrphanResources($groupedResources) {
+        foreach($groupedResources as $resourceGroup) {
+	        $this->checkForOrphanResource($resourceGroup);
+	    }
     }
+
+	protected function checkForOrphanResource($resourcesWithSameSha1) {
+		$orphanResourcesCounter = 0;
+
+		/** @var Resource $resource */
+		foreach($resourcesWithSameSha1 as $resource) {
+
+			/** @var QueryResultInterface<Asset> $assets */
+			$assets = $this->assetRepository->findByResource($resource);
+
+			if(count($assets) === 1) {
+				$asset = $this->searchForOrphanAsset($assets->getFirst());
+
+				if($asset) {
+					$this->orphanAssets[] = $asset;
+					$this->orphanResourceEntries[] = $resource;
+					$orphanResourcesCounter++;
+				}
+			} elseif (count($assets) === 0) {
+				$orphanResourcesCounter++;
+				$this->orphanResourceEntries[] = $resource;
+			} else {
+				$this->consoleOutput->outputLine('ATTENTION we have found %s assets for the same resource "%s" with the sha1 key %s',
+					array(count($assets), $resource->getFilename(), $resource->getSha1()));
+			}
+		}
+
+		// if all resources with the same sah1 hasn't any asset or the asset is orphan, we can delete it
+		if(count($resourcesWithSameSha1) === $orphanResourcesCounter) {
+			$this->orphanResources[] = $resource;
+		}
+
+	}
 
     /**
      * Search for an orphan asset at the node data repository
-     * If a asset is unused return the asset, else return false
+     * If a asset is unused return the asset, otherwise return false
      *
      * @param Asset $asset
      * @return bool|Asset
@@ -199,67 +279,5 @@ class CleanService {
         foreach($thumbnails as $thumbnail) {
             $this->thumbnailRepository->remove($thumbnail);
         }
-    }
-
-    /**
-     * If a resource has no asset, we can remove this database entry
-     * But if we want to delete the source file we have to check if other resources use the same source file (same sha1)
-     *
-     * ToDo check if resource has a thumbnail, at the moment the resource will be deleted also if a thumbnail exists,
-     * that's not a big problem because it will automatically new created by the neos core, if needed, but its not nice
-     *
-     * @param $resource Resource
-     * @return void
-     */
-    protected function checkResourcesWithSameSah1($resource) {
-        $resourcesWithSameSha1 = $this->resourceRepository->findBySha1($resource->getSha1());
-
-        $orphanAssets = 0;
-        foreach($resourcesWithSameSha1 as $sameResource) {
-            $asset = $this->assetRepository->findByResource($sameResource);
-
-            if(count($asset) === 0) {
-                $orphanAssets++;
-            } elseif(count($asset) === 1) {
-                $orphanAsset = $this->searchForOrphanAsset($asset->getFirst());
-
-                if($orphanAsset) {
-                    $orphanAssets++;
-                    $this->removeOrphanAsset($orphanAsset);
-                }
-            }
-        }
-
-        // if all resources with the same sah1 hasn't any asset or the asset is unused, we can delete it
-        if(count($resourcesWithSameSha1) === intval($orphanAssets)) {
-            $this->orphanResources[] = $resource;
-            $this->consoleOutput->outputLine('The resource with the sha1 key "%s" and the name "%s" has no asset', array($resource->getSha1(), $resource->getFilename()));
-        }
-    }
-
-    /**
-     * If a resource has a asset, we have to check if this asset is used at a node data
-     *
-     * @param $resource Resource
-     * @param $asset Asset
-     * @return void
-     */
-    public function checkForOrphanAsset($resource, $asset) {
-        $orphanAsset = $this->searchForOrphanAsset($asset);
-        if($orphanAsset) {
-            $this->orphanResources[] = $resource;
-            $this->removeOrphanAsset($orphanAsset);
-            $this->consoleOutput->outputLine('The resource with the sha1 key "%s" and the name "%s" is no longer used at any node data', array($resource->getSha1(), $resource->getFilename()));
-        }
-    }
-
-    /**
-     * This method is for a testing mode in the future
-     * ToDo implement testing mode
-     *
-     * @param $orphanAsset
-     */
-    protected function removeOrphanAsset($orphanAsset) {
-        $this->assetRepository->remove($orphanAsset);
     }
 }

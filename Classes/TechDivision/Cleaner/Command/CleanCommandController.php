@@ -21,11 +21,11 @@ use TYPO3\Flow\Annotations as Flow;
 class CleanCommandController extends \TYPO3\Flow\Cli\CommandController {
 
 	/**
-	* Clean service
-	*
-	* @var \TechDivision\Cleaner\Service\CleanService
-	* @Flow\Inject
-	*/
+	 * Clean service
+	 *
+	 * @var \TechDivision\Cleaner\Service\CleanService
+	 * @Flow\Inject
+	 */
 	protected $cleanService;
 
 	/**
@@ -34,8 +34,7 @@ class CleanCommandController extends \TYPO3\Flow\Cli\CommandController {
 	 * @return void
 	 */
 	public function resourcesCommand() {
-		$count = $this->cleanService->removeOrphanResources();
-		$this->outputLine('%s resources has been removed from database and filesystem.', array($count));
+		$this->cleanService->removeOrphanResources();
 	}
 
 }
