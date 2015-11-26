@@ -29,12 +29,22 @@ class CleanCommandController extends \TYPO3\Flow\Cli\CommandController {
 	protected $cleanService;
 
 	/**
+	 * Orphan finder service
+	 *
+	 * @var \TechDivision\Cleaner\Service\OrphanFinderService
+	 * @Flow\Inject
+	 */
+	protected $orphanFinderService;
+
+	/**
 	 * Removes all orphan/unused resources from database and filesystem
 	 *
 	 * @return void
 	 */
 	public function resourcesCommand() {
-		$this->cleanService->removeOrphanResources();
+		$orphans = $this->orphanFinderService->findOrphanResources();
+
+		$this->cleanService->removeOrphanResources($orphans);
 	}
 
 }
