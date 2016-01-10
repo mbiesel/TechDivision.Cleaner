@@ -1,0 +1,11 @@
+TYPO3:
+  Flow:
+    log:
+      cleanerLogger:
+        backend: TYPO3\Flow\Log\Backend\FileBackend
+        backendOptions:
+          logFileURL: '%FLOW_PATH_DATA%Logs/Cleaner.log'
+          createParentDirectories: TRUE
+          severityThreshold: '%LOG_INFO%'
+          maximumLogFileSize: 10485760
+          logFilesToKeep: 1

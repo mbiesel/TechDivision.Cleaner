@@ -20,6 +20,7 @@ use \TYPO3\Media\Domain\Model\Image;
 use TYPO3\Flow\Persistence\QueryResultInterface;
 use \TYPO3\Flow\Resource\Resource;
 use TYPO3\Flow\Utility\TypeHandling;
+use TYPO3\Flow\Core\Bootstrap;
 
 class OrphanFinderService {
 
@@ -56,12 +57,27 @@ class OrphanFinderService {
 	protected $consoleOutput;
 
 	/**
+	 * Core bootstrap
+	 *
+	 * @var \TYPO3\Flow\Core\Bootstrap
+	 */
+	protected $bootstrap;
+
+	/**
 	 * Persistence manager
 	 *
 	 * @Flow\Inject
 	 * @var \TYPO3\Flow\Persistence\PersistenceManagerInterface
 	 */
 	protected $persistenceManager;
+
+	/**
+	 * Cleaner log
+	 *
+	 * @Flow\Inject
+	 * @var \TYPO3\Flow\Log\LoggerInterface
+	 */
+	protected $cleanerLogger;
 
 	/**
 	 * All orphan persistent resources
@@ -78,7 +94,7 @@ class OrphanFinderService {
 	protected $orphanAssets = array();
 
 	/**
-	 * All orphan assets
+	 * All orphan resources
 	 *
 	 * @var Array<Resource>
 	 */
@@ -95,7 +111,10 @@ class OrphanFinderService {
 		foreach($resourcesGroupedBySha1 as $sha1Group) {
 			$this->searchForOrphanResource($sha1Group);
 		}
-		
+
+		$this->consoleOutput->progressFinish();
+		$this->consoleOutput->outputLine();
+
 		return array(
 			'orphanPersistentResources' => $this->orphanPersistentResources,
 			'orphanResources' => $this->orphanResources,
@@ -104,7 +123,7 @@ class OrphanFinderService {
 	}
 
 	/**
-	 * Group all resources by same sha1,
+	 * Group all resources by sha1,
 	 * to decide which persistent resources can be deleted
 	 *
 	 * @return array
@@ -112,6 +131,8 @@ class OrphanFinderService {
 	protected function groupAllResourcesBySha1() {
 		$resourcesGroupedBySha1 = array();
 		$resources = $this->resourceRepository->findAll();
+
+		$this->consoleOutput->progressStart(count($resources));
 
 		/** @var Resource $resource */
 		foreach($resources as $resource) {
@@ -132,6 +153,7 @@ class OrphanFinderService {
 
 		/** @var Resource $resource */
 		foreach($resourcesWithSameSha1 as $resource) {
+			$this->consoleOutput->progressAdvance(1);
 
 			/** @var QueryResultInterface<Asset> $assets */
 			$assets = $this->assetRepository->findByResource($resource);
@@ -140,22 +162,27 @@ class OrphanFinderService {
 			if(count($assets) === 1) {
 				$asset = $this->searchForOrphanAsset($assets->getFirst());
 
-				// true if asset is orphan
+				// if a asset is given, this asset is orphan, otherwise false
 				if($asset) {
 					$this->orphanAssets[] = $asset;
 					$this->orphanResources[] = $resource;
 					$orphanResourceCounter++;
-					$this->consoleOutput->outputLine('Found orphan asset with identifier "%s" and label "%s", therefore his resource with sha1 "%s" is also orphan',
-						array($asset->getIdentifier(), $asset->getLabel(), $resource->getSha1()));
+					$this->cleanerLogger->log(sprintf('Found orphan asset with identifier "%s" and label "%s", therefore his resource with sha1 "%s" is also orphan',
+						$asset->getIdentifier(), $asset->getLabel(), $resource->getSha1()), LOG_INFO);
 				}
 			// resource has no asset
 			} elseif (count($assets) === 0) {
 				$orphanResourceCounter++;
 				$this->orphanResources[] = $resource;
-				$this->consoleOutput->outputLine('Found orphan resource with sha1 "%s" and label "%s"', array($resource->getSha1(), $resource->getFilename()));
+				$this->cleanerLogger->log(sprintf('Found orphan resource with sha1 "%s" and label "%s"', $resource->getSha1(), $resource->getFilename()),LOG_INFO);
+			// ERROR
 			} else {
-				$this->consoleOutput->outputLine('ERROR: we have found %s assets for the same resource "%s" with the sha1 "%s". We have to abort this!',
-					array(count($assets), $resource->getFilename(), $resource->getSha1()));
+				$message = sprintf('ERROR: we have found %s assets for the same resource "%s" with the sha1 "%s". We have to abort this!',
+					count($assets), $resource->getFilename(), $resource->getSha1());
+
+				$this->consoleOutput->progressFinish();
+				$this->consoleOutput->outputLine($message);
+				$this->cleanerLogger->log($message, LOG_INFO);
 				die;
 			}
 		}
@@ -163,7 +190,7 @@ class OrphanFinderService {
 		// if all resources with the same sah1 hasn't any asset or the asset is orphan, we can delete it
 		if(count($resourcesWithSameSha1) === $orphanResourceCounter) {
 			$this->orphanPersistentResources[] = $resource;
-			$this->consoleOutput->outputLine('Found orphan persistent resource with sha1 "%s" and filename "%s"', array($resource->getSha1(), $resource->getFilename()));
+			$this->cleanerLogger->log(sprintf('Found orphan persistent resource with sha1 "%s" and filename "%s"', $resource->getSha1(), $resource->getFilename()), LOG_INFO);
 		}
 	}
 
@@ -190,12 +217,11 @@ class OrphanFinderService {
 
 		$relatedNodes = $this->nodeDataRepository->findNodesByRelatedEntities($relationMap);
 
-		// if the asset is needed return false, otherwise return the orphan asset
+		// if the asset is in use return false, otherwise return the orphan asset
 		if (count($relatedNodes) > 0) {
 			return false;
 		} else {
 			return $asset;
 		}
 	}
-
 }

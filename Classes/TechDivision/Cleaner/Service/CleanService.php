@@ -125,14 +125,15 @@ class CleanService {
     /**
      * Remove all orphan resource files and database entries
      *
-     * @param $orphans Array
+     * @param array $orphans
      * @return void
      */
-    public function removeOrphanResources($orphans) {
+    public function removeOrphanResources(array $orphans) {
 		$orphanPersistentResources = $orphans['orphanPersistentResources'];
 		$orphanResources = $orphans['orphanResources'];
 		$orphanAssets = $orphans['orphanAssets'];
 
+	    $this->askBeforeCleaning($orphanPersistentResources, $orphanResources, $orphanAssets);
 
 		/** @var Resource $resource */
 		foreach($orphanPersistentResources as $resource) {
@@ -152,10 +153,10 @@ class CleanService {
 			$this->assetRepository->remove($asset);
 		}
 
-		$this->consoleOutput->outputLine("SUCCESS");
-		$this->consoleOutput->outputLine('%s persistent resources were deleted from filesystem, %s resource and %s asset entries has been removed from database.',
+	    $this->consoleOutput->outputLine('%s persistent resources were deleted from filesystem, %s resource and %s asset entries has been removed from database.',
 			array(count($orphanPersistentResources), count($orphanResources), count($orphanAssets)));
-	}
+	    $this->consoleOutput->outputLine("SUCCESS");
+    }
 
 	protected function removeResourceAndThumbnailsByResource($resource) {
 		// delete from database
@@ -168,14 +169,63 @@ class CleanService {
     /**
      * Delete thumbnails by resource
      *
-     * @param $resource Resource
+     * @param Resource $resource
      * @return void
      */
-    protected function deleteThumbnailsByResource($resource) {
+    protected function deleteThumbnailsByResource(Resource $resource) {
         $thumbnails = $this->thumbnailRepository->findByResource($resource);
 
         foreach($thumbnails as $thumbnail) {
             $this->thumbnailRepository->remove($thumbnail);
         }
     }
+
+	/**
+	 * Ask user before all orphans were deleted
+	 *
+	 * @param array $orphanPersistentResources
+	 * @param array $orphanResources
+	 * @param array $orphanAssets
+	 */
+	protected function askBeforeCleaning(array $orphanPersistentResources, array $orphanResources, array $orphanAssets) {
+		$response = NULL;
+		$orphans = 0;
+
+		/** @var $asset Asset */
+		foreach($orphanAssets as $asset) {
+			$orphans++;
+			$this->consoleOutput->outputLine('Found orphan asset with identifier "%s" and label "%s"',
+				array($asset->getIdentifier(), $asset->getLabel()));
+		}
+
+		/** @var $resource Resource */
+		foreach($orphanResources as $resource) {
+			$orphans++;
+			$this->consoleOutput->outputLine('Found orphan resource with sha1 "%s" and label "%s"', array($resource->getSha1(), $resource->getFilename()));
+		}
+
+		/** @var $resource Resource */
+		foreach($orphanPersistentResources as $persistentResource) {
+			$orphans++;
+			$this->consoleOutput->outputLine('Found orphan persistent resource with sha1 "%s" and filename "%s"', array($persistentResource->getSha1(), $persistentResource->getFilename()));
+		}
+
+		if($orphans > 0) {
+			while (!in_array($response, array('y', 'n'))) {
+				$response = $this->consoleOutput->ask('<comment>Do you want to remove all orphans? (y/n) </comment>');
+			}
+
+			switch ($response) {
+				case 'y':
+					break;
+				case 'n':
+					$this->consoleOutput->outputLine('Did not delete any orphans.');
+					exit;
+			}
+		} else {
+			$this->consoleOutput->outputLine("No orphans were found.");
+			exit;
+		}
+
+	}
 }

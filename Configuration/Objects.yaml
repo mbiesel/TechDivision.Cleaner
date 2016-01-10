@@ -1,0 +1,14 @@
+TechDivision\Cleaner\Service\OrphanFinderService:
+  properties:
+    cleanerLogger:
+      object:
+        factoryObjectName: TYPO3\Flow\Log\LoggerFactory
+        arguments:
+          1:
+            value: 'TechDivision_Cleaner'
+          2:
+            value: 'TYPO3\Flow\Log\Logger'
+          3:
+            setting: TYPO3.Flow.log.cleanerLogger.backend
+          4:
+            setting: TYPO3.Flow.log.cleanerLogger.backendOptions
