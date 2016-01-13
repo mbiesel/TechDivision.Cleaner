@@ -20,7 +20,6 @@ use \TYPO3\Media\Domain\Model\Image;
 use TYPO3\Flow\Persistence\QueryResultInterface;
 use \TYPO3\Flow\Resource\Resource;
 use TYPO3\Flow\Utility\TypeHandling;
-use TYPO3\Flow\Core\Bootstrap;
 
 class OrphanFinderService {
 
@@ -55,13 +54,6 @@ class OrphanFinderService {
 	 * @var \TYPO3\Flow\Cli\ConsoleOutput
 	 */
 	protected $consoleOutput;
-
-	/**
-	 * Core bootstrap
-	 *
-	 * @var \TYPO3\Flow\Core\Bootstrap
-	 */
-	protected $bootstrap;
 
 	/**
 	 * Persistence manager
@@ -105,7 +97,7 @@ class OrphanFinderService {
 	 *
 	 * @return array
 	 */
-	public function findOrphanResources() {
+	public function findOrphans() {
 		$resourcesGroupedBySha1 = $this->groupAllResourcesBySha1();
 
 		foreach($resourcesGroupedBySha1 as $sha1Group) {
@@ -182,7 +174,7 @@ class OrphanFinderService {
 
 				$this->consoleOutput->progressFinish();
 				$this->consoleOutput->outputLine($message);
-				$this->cleanerLogger->log($message, LOG_INFO);
+				$this->cleanerLogger->log($message, LOG_ERR);
 				die;
 			}
 		}

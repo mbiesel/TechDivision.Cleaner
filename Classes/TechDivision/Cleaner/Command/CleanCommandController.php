@@ -42,9 +42,9 @@ class CleanCommandController extends \TYPO3\Flow\Cli\CommandController {
 	 * @return void
 	 */
 	public function resourcesCommand() {
-		$orphans = $this->orphanFinderService->findOrphanResources();
+		$orphans = $this->orphanFinderService->findOrphans();
 
-		$this->cleanService->removeOrphanResources($orphans);
+		$this->cleanService->removeOrphans($orphans);
 	}
 
 }

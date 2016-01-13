@@ -128,7 +128,7 @@ class CleanService {
      * @param array $orphans
      * @return void
      */
-    public function removeOrphanResources(array $orphans) {
+    public function removeOrphans(array $orphans) {
 		$orphanPersistentResources = $orphans['orphanPersistentResources'];
 		$orphanResources = $orphans['orphanResources'];
 		$orphanAssets = $orphans['orphanAssets'];
