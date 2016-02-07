@@ -3,8 +3,7 @@
     "type": "typo3-flow-package",
     "description": "This package provides a command controller which remove all orphan resources from database and file system",
     "require": {
-        "typo3/flow": "*",
-        "typo3/neos": "*"
+        "typo3/neos": "~2.0"
     },
     "authors" : [{
         "name" : "Marcus Biesel",

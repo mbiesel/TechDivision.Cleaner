@@ -18,33 +18,39 @@ use TYPO3\Flow\Annotations as Flow;
 /**
  * @Flow\Scope("singleton")
  */
-class CleanCommandController extends \TYPO3\Flow\Cli\CommandController {
+class CleanCommandController extends \TYPO3\Flow\Cli\CommandController
+{
 
-	/**
-	 * Clean service
-	 *
-	 * @var \TechDivision\Cleaner\Service\CleanService
-	 * @Flow\Inject
-	 */
-	protected $cleanService;
+    /**
+     * Clean service
+     *
+     * @var \TechDivision\Cleaner\Service\CleanService
+     * @Flow\Inject
+     */
+    protected $cleanService;
 
-	/**
-	 * Orphan finder service
-	 *
-	 * @var \TechDivision\Cleaner\Service\OrphanFinderService
-	 * @Flow\Inject
-	 */
-	protected $orphanFinderService;
+    /**
+     * Orphan finder service
+     *
+     * @var \TechDivision\Cleaner\Service\OrphanFinderService
+     * @Flow\Inject
+     */
+    protected $orphanFinderService;
 
-	/**
-	 * Removes all orphan/unused resources from database and filesystem
-	 *
-	 * @return void
-	 */
-	public function resourcesCommand() {
-		$orphans = $this->orphanFinderService->findOrphans();
+    /**
+     * Removes all orphan/unused resources from database and filesystem
+     *
+     * @return void
+     */
+    public function resourcesCommand()
+    {
+        $orphans = $this->orphanFinderService->findOrphans();
 
-		$this->cleanService->removeOrphans($orphans);
-	}
+        $amountDeletedOrphans = $this->cleanService->removeOrphans($orphans);
+
+        $this->outputLine('%s persistent resources were deleted from filesystem, %s resource and %s asset entries has been removed from database.',
+            array($amountDeletedOrphans['amountDeletedPersistentResources'], $amountDeletedOrphans['amountDeletedResources'], $amountDeletedOrphans['amountDeletedAssets']));
+        $this->outputLine("SUCCESS");
+    }
 
 }
