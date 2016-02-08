@@ -83,6 +83,13 @@ class CleanService
      */
     protected $consoleOutput;
 
+    /**
+     * Amount orphans
+     *
+     * @var integer
+     */
+    protected $amountOrphans;
+
 
     /**
      * Initialize clean service
@@ -98,7 +105,7 @@ class CleanService
      * Remove all orphan resource files and database entries, but ask therefor
      *
      * @param array $orphans
-     * @return array
+     * @return bool|array
      */
     public function removeOrphans(array $orphans)
     {
@@ -106,15 +113,18 @@ class CleanService
         $orphanResources = $orphans['orphanResources'];
         $orphanAssets = $orphans['orphanAssets'];
 
-        $this->askBeforeCleaning($orphanPersistentResources, $orphanResources, $orphanAssets);
+        $response = $this->askBeforeCleaning($orphanPersistentResources, $orphanResources, $orphanAssets);
 
-        $this->cleanOrphans($orphanPersistentResources, $orphanResources, $orphanAssets);
+        if ($response === TRUE) {
+            $response = array(
+                'amountDeletedPersistentResources' => count($orphanPersistentResources),
+                'amountDeletedResources' => count($orphanResources),
+                'amountDeletedAssets' => count($orphanAssets),
+            );
+        }
 
-        return array(
-            'amountDeletedAssets' => count($orphanAssets),
-            'amountDeletedResources' => count($orphanResources),
-            'amountDeletedPersistentResources' => count($orphanPersistentResources),
-        );
+        return $response;
+
     }
 
     /**
@@ -123,12 +133,17 @@ class CleanService
      * @param array $orphanPersistentResources
      * @param array $orphanResources
      * @param array $orphanAssets
-     * @return void
+     * @return bool
      */
     protected function cleanOrphans(array $orphanPersistentResources, array $orphanResources, array $orphanAssets)
     {
+        $response = TRUE;
+        $this->consoleOutput->outputLine();
+        $this->consoleOutput->progressStart($this->amountOrphans);
+
         /** @var Resource $resource */
         foreach ($orphanPersistentResources as $resource) {
+            $this->consoleOutput->progressAdvance(1);
             $this->removeResourceAndThumbnailsByResource($resource);
 
             // delete from file system
@@ -137,13 +152,20 @@ class CleanService
 
         /** @var Resource $orphanResource */
         foreach ($orphanResources as $orphanResource) {
+            $this->consoleOutput->progressAdvance(1);
             $this->removeResourceAndThumbnailsByResource($orphanResource);
         }
 
         /** @var Asset $asset */
         foreach ($orphanAssets as $asset) {
+            $this->consoleOutput->progressAdvance(1);
             $this->assetRepository->remove($asset);
         }
+
+        $this->consoleOutput->progressFinish();
+        $this->consoleOutput->outputLine();
+
+        return $response;
     }
 
     /**
@@ -182,47 +204,52 @@ class CleanService
      * @param array $orphanPersistentResources
      * @param array $orphanResources
      * @param array $orphanAssets
-     * @return void
+     * @return bool
      */
     protected function askBeforeCleaning(array $orphanPersistentResources, array $orphanResources, array $orphanAssets)
     {
-        $response = NULL;
-        $orphans = 0;
+        $userInput = NULL;
+        $response = FALSE;
+        $orphansCounter = 0;
 
         /** @var $asset Asset */
         foreach ($orphanAssets as $asset) {
-            $orphans++;
-            $this->consoleOutput->outputLine('Found orphan asset with identifier "%s" and label "%s"',
-                array($asset->getIdentifier(), $asset->getLabel()));
+            $orphansCounter++;
+            $this->consoleOutput->outputLine(sprintf('Found orphan asset with identifier "%s" and label "%s"',
+                $asset->getIdentifier(), $asset->getLabel()));
         }
 
         /** @var $resource Resource */
         foreach ($orphanResources as $resource) {
-            $orphans++;
-            $this->consoleOutput->outputLine('Found orphan resource with sha1 "%s" and label "%s"', array($resource->getSha1(), $resource->getFilename()));
+            $orphansCounter++;
+            $this->consoleOutput->outputLine(sprintf('Found orphan resource with sha1 "%s" and label "%s"', $resource->getSha1(), $resource->getFilename()));
         }
 
         /** @var $resource Resource */
         foreach ($orphanPersistentResources as $persistentResource) {
-            $orphans++;
-            $this->consoleOutput->outputLine('Found orphan persistent resource with sha1 "%s" and filename "%s"', array($persistentResource->getSha1(), $persistentResource->getFilename()));
+            $orphansCounter++;
+            $this->consoleOutput->outputLine(sprintf('Found orphan persistent resource with sha1 "%s" and filename "%s"', $persistentResource->getSha1(), $persistentResource->getFilename()));
         }
 
-        if ($orphans > 0) {
-            while (!in_array($response, array('y', 'n'))) {
-                $response = $this->consoleOutput->ask('<comment>Do you want to remove all orphans? (y/n) </comment>');
+        $this->amountOrphans = $orphansCounter;
+
+        if ($orphansCounter > 0) {
+            while (!in_array($userInput, array('y', 'n'))) {
+                $userInput = $this->consoleOutput->ask(sprintf("<comment>Do you want to remove %s orphans? (y/n) </comment>", $orphansCounter));
             }
 
-            switch ($response) {
+            switch ($userInput) {
                 case 'y':
+                    $response = $this->cleanOrphans($orphanPersistentResources, $orphanResources, $orphanAssets);
                     break;
                 case 'n':
-                    $this->consoleOutput->outputLine('Did not delete any orphans.');
-                    exit;
+                    $this->consoleOutput->outputLine(sprintf("Did not delete any orphans.\nExit"));
+                    break;
             }
         } else {
-            $this->consoleOutput->outputLine("No orphans were found.");
-            exit;
+            $this->consoleOutput->outputLine(sprintf("No orphans given to remove.\nExit"));
         }
+
+        return $response;
     }
 }

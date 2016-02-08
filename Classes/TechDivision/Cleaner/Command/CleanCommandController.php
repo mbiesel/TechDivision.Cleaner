@@ -46,11 +46,19 @@ class CleanCommandController extends \TYPO3\Flow\Cli\CommandController
     {
         $orphans = $this->orphanFinderService->findOrphans();
 
-        $amountDeletedOrphans = $this->cleanService->removeOrphans($orphans);
+        if($orphans === FALSE) {
+            $this->quit();
+        }
 
-        $this->outputLine('%s persistent resources were deleted from filesystem, %s resource and %s asset entries has been removed from database.',
-            array($amountDeletedOrphans['amountDeletedPersistentResources'], $amountDeletedOrphans['amountDeletedResources'], $amountDeletedOrphans['amountDeletedAssets']));
-        $this->outputLine("SUCCESS");
+        $response = $this->cleanService->removeOrphans($orphans);
+
+        if (is_array($response)) {
+            $this->outputLine('%s persistent resources has been deleted from filesystem, %s resource and %s asset entries has been removed from database.',
+                array($response['amountDeletedPersistentResources'], $response['amountDeletedResources'], $response['amountDeletedAssets']));
+            $this->outputLine("SUCCESS");
+        }
+
+        $this->quit();
     }
 
 }

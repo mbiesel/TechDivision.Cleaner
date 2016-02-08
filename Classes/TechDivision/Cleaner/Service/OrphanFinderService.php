@@ -97,10 +97,11 @@ class OrphanFinderService
     /**
      * Find orphan assets, resources and persistent resources
      *
-     * @return array
+     * @return bool|array
      */
     public function findOrphans()
     {
+        $response = FALSE;
         $resourcesGroupedBySha1 = $this->groupAllResourcesBySha1();
 
         foreach ($resourcesGroupedBySha1 as $sha1Group) {
@@ -110,11 +111,22 @@ class OrphanFinderService
         $this->consoleOutput->progressFinish();
         $this->consoleOutput->outputLine();
 
-        return array(
-            'orphanPersistentResources' => $this->orphanPersistentResources,
-            'orphanResources' => $this->orphanResources,
-            'orphanAssets' => $this->orphanAssets
-        );
+        // count all orphans
+        $amountOrphans = count($this->orphanPersistentResources) + count($this->orphanResources) + count($this->orphanAssets);
+
+        if($amountOrphans > 0) {
+            $response = array(
+                'orphanPersistentResources' => $this->orphanPersistentResources,
+                'orphanResources' => $this->orphanResources,
+                'orphanAssets' => $this->orphanAssets
+            );
+        } else {
+            $message = sprintf("There are no orphans on your system. \nExit");
+            $this->consoleOutput->outputLine($message);
+            $this->cleanerLogger->log($message);
+        }
+
+        return $response;
     }
 
     /**
@@ -157,11 +169,11 @@ class OrphanFinderService
             $assets = $this->assetRepository->findByResource($resource);
 
             // resource has one asset
-            if (count($assets) === 1) {
+            if ($assets->count() === 1) {
                 $asset = $this->searchForOrphanAsset($assets->getFirst());
 
                 // if a asset is given, this asset is orphan, otherwise false
-                if ($asset) {
+                if ($asset instanceof Asset) {
                     $this->orphanAssets[] = $asset;
                     $this->orphanResources[] = $resource;
                     $orphanResourceCounter++;
@@ -169,7 +181,7 @@ class OrphanFinderService
                         $asset->getIdentifier(), $asset->getLabel(), $resource->getSha1()), LOG_INFO);
                 }
                 // resource has no asset
-            } elseif (count($assets) === 0) {
+            } elseif ($assets->count()  === 0) {
                 $orphanResourceCounter++;
                 $this->orphanResources[] = $resource;
                 $this->cleanerLogger->log(sprintf('Found orphan resource with sha1 "%s" and label "%s"', $resource->getSha1(), $resource->getFilename()), LOG_INFO);
@@ -217,7 +229,7 @@ class OrphanFinderService
 
         // if the asset is in use return false, otherwise return the orphan asset
         if (count($relatedNodes) > 0) {
-            return false;
+            return FALSE;
         } else {
             return $asset;
         }
